@@ -141,6 +141,9 @@ body {
   border-radius: 2px;
   transition: width 400ms ease;
 }
+.bh-card-progress.manual .bh-progress-fill {
+  background: linear-gradient(90deg, var(--life), var(--accent));  /* 手动 = 更暖的渐变 */
+}
 .bh-progress-meta {
   display: flex;
   justify-content: space-between;
@@ -313,6 +316,62 @@ body {
   gap: 4px;
   font-size: 11px;
   color: var(--text-dim);
+}
+.bh-modal-divider {
+  font-size: 11px;
+  color: var(--text-dim);
+  border-top: 1px dashed var(--border);
+  padding-top: 8px;
+  margin-top: 4px;
+}
+/* 步骤数字 input 收窄一点，别撑满 */
+.bh-modal-card input[type="number"] {
+  width: 100px;
+}
+/* 已完成 slider 那块的 header（左标题 + 右实时数字） */
+.bh-modal-slider-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.bh-slider-value {
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.bh-slider-value.dim {
+  color: var(--text-dim);
+  font-weight: 400;
+  font-style: italic;
+}
+/* 自定义 range slider */
+.bh-modal-card input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.08);
+  outline: none;
+  padding: 0;
+  margin: 4px 0 0;
+  background-image: linear-gradient(90deg, var(--life), var(--accent));
+  background-size: var(--fill, 0%) 100%;
+  background-repeat: no-repeat;
+}
+.bh-modal-card input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #2a2a30;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.bh-modal-card input[type="range"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 .bh-modal-card input, .bh-modal-card select {
   background: rgba(0,0,0,0.2);

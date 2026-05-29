@@ -430,8 +430,10 @@ local function reconcile()
           t.recap = liveSession.recap
           t.updated_at = isoNow()
         end
-        -- 进度刷新（plan.md 变化时跟着变）
-        t.progress = liveSession.progress
+        -- 进度刷新：plan.md 变化时跟着变；但用户手动填的（source=manual）永远尊重
+        if not (t.progress and t.progress.source == "manual") then
+          t.progress = liveSession.progress
+        end
         if not t.subtitle or t.subtitle == "" then
           t.subtitle = t.tool .. " · " .. basename(t.cwd)
         end

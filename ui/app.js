@@ -25,6 +25,10 @@
   const $fGoal     = document.getElementById('bh-f-goal');
   const $fNext     = document.getElementById('bh-f-next');
   const $fTag      = document.getElementById('bh-f-tag');
+  const $fTotal       = document.getElementById('bh-f-total');
+  const $fDone        = document.getElementById('bh-f-done');
+  const $fDoneDisplay = document.getElementById('bh-f-done-display');
+  const $fCurrent     = document.getElementById('bh-f-current');
   const $mSave     = document.getElementById('bh-modal-save');
   const $mCancel   = document.getElementById('bh-modal-cancel');
 
@@ -150,14 +154,19 @@
       ? `<div class="bh-card-subtitle">${escapeHtml(t.subtitle)}</div>`
       : '';
     const progressHtml = t.progress && t.progress.total
-      ? `<div class="bh-card-progress" title="${escapeHtml(t.progress.file || 'plan.md')}">
-           <div class="bh-progress-bar"><div class="bh-progress-fill" style="width:${t.progress.percent}%"></div></div>
-           <div class="bh-progress-meta">
-             <span class="bh-progress-pct">📊 ${t.progress.percent}%</span>
-             <span class="bh-progress-count">${t.progress.done}/${t.progress.total}</span>
-           </div>
-           ${t.progress.current ? `<div class="bh-progress-step">当前：${escapeHtml(t.progress.current)}</div>` : ''}
-         </div>`
+      ? (() => {
+          const isManual = t.progress.source === 'manual';
+          const tipText  = isManual ? '✏️ 手动设置' : (t.progress.file || 'plan.md');
+          const icon     = isManual ? '✏️' : '📊';
+          return `<div class="bh-card-progress ${isManual ? 'manual' : ''}" title="${escapeHtml(tipText)}">
+            <div class="bh-progress-bar"><div class="bh-progress-fill" style="width:${t.progress.percent}%"></div></div>
+            <div class="bh-progress-meta">
+              <span class="bh-progress-pct">${icon} ${t.progress.percent}%</span>
+              <span class="bh-progress-count">${t.progress.done}/${t.progress.total}</span>
+            </div>
+            ${t.progress.current ? `<div class="bh-progress-step">当前：${escapeHtml(t.progress.current)}</div>` : ''}
+          </div>`;
+        })()
       : '';
     const recapHtml = t.recap
       ? `<div class="bh-card-recap"><span class="bh-recap-icon">📝</span>${escapeHtml(t.recap)}</div>`
@@ -282,8 +291,36 @@
     $fGoal.value  = t ? t.goal  : '';
     $fNext.value  = t ? t.next_step : '';
     $fTag.value   = t ? (t.tag || '') : '';
+    const isManual = t && t.progress && t.progress.source === 'manual';
+    const presetTotal = isManual ? (t.progress.total ?? 0) : 0;
+    const presetDone  = isManual ? (t.progress.done  ?? 0) : 0;
+    $fTotal.value   = presetTotal > 0 ? presetTotal : '';
+    $fDone.max      = presetTotal;        // 必须先 set max 再 set value，否则被钳到 0
+    $fDone.value    = presetDone;
+    $fCurrent.value = isManual ? (t.progress.current ?? '') : '';
+    syncProgressSlider();
     $modal.classList.remove('hidden');
     setTimeout(() => $fTitle.focus(), 50);
+  }
+
+  function syncProgressSlider() {
+    const total = Math.max(0, parseInt($fTotal.value, 10) || 0);
+    $fDone.max = total;
+    let done = Math.max(0, parseInt($fDone.value, 10) || 0);
+    if (done > total) { done = total; $fDone.value = total; }
+    if (total === 0) {
+      $fDoneDisplay.textContent = '先填总步骤';
+      $fDoneDisplay.classList.add('dim');
+      $fDone.disabled = true;
+    } else {
+      const pct = Math.round(done / total * 100);
+      $fDoneDisplay.textContent = `${done} / ${total} · ${pct}%`;
+      $fDoneDisplay.classList.remove('dim');
+      $fDone.disabled = false;
+      // 同步进度条的 fill 颜色比例（CSS 变量驱动）
+      const fillPct = (done / total) * 100;
+      $fDone.style.setProperty('--fill', fillPct + '%');
+    }
   }
 
   function closeModal() {
@@ -298,16 +335,41 @@
     const next  = $fNext.value.trim();
     const tag   = $fTag.value;
 
+    const totalRaw = $fTotal.value.trim();
+    const doneRaw  = $fDone.value.trim();
+    const currentRaw = $fCurrent.value.trim();
+    const total = totalRaw ? Math.max(1, parseInt(totalRaw, 10) || 0) : null;
+    const done  = doneRaw  ? Math.max(0, parseInt(doneRaw,  10) || 0) : null;
+    let manualProgress = null;
+    if (total != null || done != null || currentRaw) {
+      const safeTotal = total ?? (done != null ? Math.max(done, 1) : 1);
+      const safeDone  = Math.min(done ?? 0, safeTotal);
+      manualProgress = {
+        total:   safeTotal,
+        done:    safeDone,
+        current: currentRaw || null,
+        percent: Math.round((safeDone / safeTotal) * 100),
+        source:  'manual',
+      };
+    }
+
     if (state.editingId) {
       const t = state.tasks.find(x => x.id === state.editingId);
       if (t) {
         t.title = title; t.goal = goal; t.next_step = next; t.tag = tag;
+        if (manualProgress) {
+          t.progress = manualProgress;
+        } else if (t.progress && t.progress.source === 'manual') {
+          // 用户清空了进度字段 → 撤回手动模式，让 plan.md 自动接管（或不显示）
+          delete t.progress;
+        }
         t.updated_at = nowIso();
       }
     } else {
       state.tasks.push({
         id: 'manual-' + Date.now(),
         title, goal, next_step: next, tag,
+        progress: manualProgress || undefined,
         status: 'active',
         source: 'manual',
         created_at: nowIso(),
@@ -340,6 +402,8 @@
   $mCancel.addEventListener('click',  closeModal);
   $mSave.addEventListener('click',    saveModal);
   $archBtn.addEventListener('click',  () => $archive.classList.toggle('hidden'));
+  $fTotal.addEventListener('input',   syncProgressSlider);
+  $fDone.addEventListener('input',    syncProgressSlider);
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !$modal.classList.contains('hidden')) closeModal();

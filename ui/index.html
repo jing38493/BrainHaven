@@ -47,6 +47,16 @@
           <option value="生活">生活</option>
         </select>
       </label>
+      <div class="bh-modal-divider">📊 进度（可选，留空走 plan.md 或不显示）</div>
+      <label>总步骤 <input type="number" id="bh-f-total" min="1" max="99" placeholder="5"></label>
+      <label class="bh-modal-slider-label">
+        <div class="bh-modal-slider-head">
+          <span>已完成</span>
+          <span class="bh-slider-value" id="bh-f-done-display">设置总步骤后可拖动</span>
+        </div>
+        <input type="range" id="bh-f-done" min="0" max="0" step="1" value="0">
+      </label>
+      <label>当前步骤 <input type="text" id="bh-f-current" placeholder="例：写文档"></label>
       <div class="bh-modal-actions">
         <button id="bh-modal-cancel" class="bh-btn bh-btn-ghost">取消</button>
         <button id="bh-modal-save"   class="bh-btn bh-btn-primary">保存</button>

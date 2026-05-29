@@ -26,7 +26,7 @@
 - ✏️ **每张卡可填**「目标 + 下一步」帮你做"context check"
 - ✓ **`!bh-done`**（推荐 0 token）/ **`/bh-done`**（slash command）一键归档卡片 + 关闭 session + 关 tab
 - 🎯 **点击卡片自动切到对应终端 tab**（支持 iTerm2 / Terminal.app）——不用手动找哪个窗口
-- 📊 **项目进度条**：cwd 根目录有 `plan.md`（含 `- [ ]` / `- [x]` checkbox）时自动渲染进度 + 当前步骤；当前步骤识别 `← **当前**` 标记，没标记则取第一个未勾的
+- 📊 **项目进度条**：cwd 根目录有 `plan.md`（含 `- [ ]` / `- [x]` checkbox）时自动渲染进度 + 当前步骤；也支持**手动输入**（✎ 编辑里填三个字段，覆盖 plan.md）
 - 🚫 **过滤僵尸进程**（JSONL > 7 天没动的当废弃）和**误识别**（如 Codex.app 子进程、claude-code-router 的 node 进程）
 - 🔄 **header 显示「X 秒前更新过」**+ poll 时旋转图标，知道系统在运行
 - 🍑 完全本地——读你的 `~/.claude/` 不上传任何东西
@@ -159,6 +159,25 @@ cp commands/bh-done.md ~/.claude/commands/
 - 当前步骤优先匹配含「当前」字样的行（`← **当前**` / `**当前**` 都行），没有则取第一个未勾的
 - 进度按 `done / total` 计算，0 个 checkbox = 不显示进度条
 - 按 `mtime` 缓存——你改 plan.md 后下一轮 reconcile（≤10s）就会刷新
+
+### 手动输入进度
+
+没有 plan.md 也想看进度？或者 plan.md 的进度不准想覆盖？点卡片的 ✎ 编辑，弹层底部有：
+
+```
+📊 进度（可选）
+总步骤 [ 8 ]
+已完成 ●━━━━━━━━━     5 / 8 · 63%   ← 拖动调整
+当前步骤 [   ]
+```
+
+拖滑块改 done，改数字框改 total，右边数字实时跟。
+
+填了 → 进度条切换成**粉橙渐变 + ✏️ 图标**（区分自动的粉绿 + 📊），存进 tasks.json 的 `progress: {..., source: "manual"}`。
+
+**覆盖规则**：
+- `source: "manual"` 永远不会被 reconcile 覆盖（即便 plan.md 改了也无视）
+- 想退回 auto / 不显示？再点 ✎，把进度 3 个字段**全清空** → 保存 → 下一轮 reconcile 自动接管 plan.md（或没 plan.md 就不显示）
 
 ### `!bh-done` / `/bh-done` 在 Claude Code 里
 
