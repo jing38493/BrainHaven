@@ -24,7 +24,7 @@
 - 📝 **抓取 recap** 从 Claude Code 的 JSONL transcript 里抠出 `aiTitle` 当卡片标题、`away_summary` 当描述
 - 🌊 **边缘自动隐藏**（macOS Dock 式行为）——平时藏在屏幕外，鼠标到最左边触发滑出
 - ✏️ **每张卡可填**「目标 + 下一步」帮你做"context check"
-- ✓ **`/bh-done` slash command** 一键归档当前会话的卡片
+- ✓ **`!bh-done`**（推荐 0 token）/ **`/bh-done`**（slash command）一键归档卡片 + 关闭 session + 关 tab
 - 🎯 **点击卡片自动切到对应终端 tab**（支持 iTerm2 / Terminal.app）——不用手动找哪个窗口
 - 📊 **项目进度条**：cwd 根目录有 `plan.md`（含 `- [ ]` / `- [x]` checkbox）时自动渲染进度 + 当前步骤；当前步骤识别 `← **当前**` 标记，没标记则取第一个未勾的
 - 🚫 **过滤僵尸进程**（JSONL > 7 天没动的当废弃）和**误识别**（如 Codex.app 子进程、claude-code-router 的 node 进程）
@@ -83,14 +83,27 @@ open -a Hammerspoon
 export BRAINHAVEN_HOME=/your/actual/path/to/BrainHaven
 ```
 
-### slash command（可选）
+### 归档命令（**两种都装，按场景选**）
+
+闪闪建议**两种都装**——同一份 Python 脚本，仅触发方式不同。日常用 `!bh-done` 省 token，习惯 `/` 的时候用 `/bh-done` 也能跑。
 
 ```bash
+# 1. 装 shell wrapper 到 PATH（→ !bh-done，0 token）
+ln -sfn "$(pwd)/scripts/bh-done" ~/.local/bin/bh-done
+
+# 2. 装 slash command（→ /bh-done，~100-200 tokens）
 mkdir -p ~/.claude/commands
 cp commands/bh-done.md ~/.claude/commands/
 ```
 
-之后在任意 Claude Code 窗口里输入 `/bh-done` 就能把当前会话的卡片归档。
+| 用法 | Token 成本 | 触发方式 | 何时用 |
+|------|-----------|---------|--------|
+| `!bh-done` | **0** | 直接走 shell，不发给模型 | 默认 / 频繁使用 |
+| `/bh-done` | ~100-200 | 走 Claude Code slash command，经过模型 | 习惯 `/` 前缀、想保留 slash 自动补全的话 |
+
+两种都支持参数：`!bh-done <sessionId-prefix>` 或 `/bh-done f5384d82`。底层都调同一个 `scripts/bh-done.py`，行为完全一致。
+
+> 如果只想留一个：删 `~/.claude/commands/bh-done.md` 留 `!bh-done`，或删 `~/.local/bin/bh-done` 留 `/bh-done`。
 
 ---
 
@@ -147,12 +160,21 @@ cp commands/bh-done.md ~/.claude/commands/
 - 进度按 `done / total` 计算，0 个 checkbox = 不显示进度条
 - 按 `mtime` 缓存——你改 plan.md 后下一轮 reconcile（≤10s）就会刷新
 
-### `/bh-done` 在 Claude Code 里
+### `!bh-done` / `/bh-done` 在 Claude Code 里
+
+两种触发方式效果完全一致，按习惯选：
 
 ```
-/bh-done                 # 归档当前 session 的卡（自动用 $CLAUDE_CODE_SESSION_ID）
-/bh-done f5384d82        # 按 sessionId 前缀指定
+!bh-done                # 归档 + 关闭当前 session 的卡（自动用 $CLAUDE_CODE_SESSION_ID）
+!bh-done f5384d82       # 按 sessionId 前缀指定
 ```
+
+**做什么**：
+1. ✓ 归档卡片到 archive + 加进 dismissed_keys
+2. 🚪 后台 1.5 秒后 SIGTERM 杀掉对应 claude 进程（先 pkill -P 收子进程，0.5s 后 SIGKILL 兜底）
+3. 🪟 AppleScript 关掉对应 tty 的 iTerm tab / Terminal 窗口
+
+**只归档不杀**：`export BH_DONE_NO_CLOSE=1` 在 ~/.zshrc 或临时窗口。
 
 ---
 

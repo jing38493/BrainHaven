@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# BrainHaven · bh-done shell wrapper
+# 在 Claude Code 聊天框输入 `!bh-done` 直接跑此脚本，0 token。
+#
+# 默认走仓库约定路径；用 $BRAINHAVEN_HOME 覆盖。
+
+SCRIPT="${BRAINHAVEN_HOME:-$HOME/Documents/whimsical/BrainHaven}/scripts/bh-done.py"
+exec python3 "$SCRIPT" "$@"
