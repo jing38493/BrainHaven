@@ -182,7 +182,46 @@
       });
     });
 
+    // 点卡片非按钮区 → 让 Lua 把对应终端窗口拉到前面
+    if (isAuto && t.session_key) {
+      el.classList.add('clickable');
+      el.addEventListener('click', (e) => {
+        if (e.target.closest('.bh-act')) return;
+        focusSession(t.session_key, el);
+      });
+    }
+
     return el;
+  }
+
+  function focusSession(sessionKey, cardEl) {
+    if (cardEl) cardEl.classList.add('focusing');
+    fetch('http://127.0.0.1:7787/focus', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_key: sessionKey }),
+    })
+      .then(r => r.text().then(t => ({ ok: r.ok, body: t })))
+      .then(({ ok, body }) => {
+        if (cardEl) {
+          if (!ok) {
+            cardEl.classList.remove('focusing');
+            cardEl.classList.add('focus-fail');
+            cardEl.title = '聚焦失败：' + body;
+            setTimeout(() => cardEl.classList.remove('focus-fail'), 1200);
+          } else {
+            setTimeout(() => cardEl.classList.remove('focusing'), 400);
+          }
+        }
+      })
+      .catch(err => {
+        if (cardEl) {
+          cardEl.classList.remove('focusing');
+          cardEl.classList.add('focus-fail');
+          setTimeout(() => cardEl.classList.remove('focus-fail'), 1200);
+        }
+        console.warn('focus failed', err);
+      });
   }
 
   // ─── actions ─────────────────────────────────────

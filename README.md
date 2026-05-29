@@ -25,6 +25,7 @@
 - 🌊 **边缘自动隐藏**（macOS Dock 式行为）——平时藏在屏幕外，鼠标到最左边触发滑出
 - ✏️ **每张卡可填**「目标 + 下一步」帮你做"context check"
 - ✓ **`/bh-done` slash command** 一键归档当前会话的卡片
+- 🎯 **点击卡片自动切到对应终端 tab**（支持 iTerm2 / Terminal.app）——不用手动找哪个窗口
 - 🚫 **过滤僵尸进程**（JSONL > 7 天没动的当废弃）和**误识别**（如 Codex.app 子进程、claude-code-router 的 node 进程）
 - 🔄 **header 显示「X 秒前更新过」**+ poll 时旋转图标，知道系统在运行
 - 🍑 完全本地——读你的 `~/.claude/` 不上传任何东西
@@ -103,12 +104,23 @@ cp commands/bh-done.md ~/.claude/commands/
 
 ### 卡片操作
 
-| 按钮 | 作用 |
+| 操作 | 作用 |
 |------|------|
+| 点卡片非按钮区 | 自动切换到对应终端 tab（iTerm2 / Terminal.app）。点击瞬间卡片粉色闪烁；失败变红 1.2s，鼠标悬停看具体错误 |
 | ✓ | 归档（移到 archive，加进 dismissed_keys 防止 reconcile 重建） |
 | ✎ | 编辑标题 / 目标 / 下一步 / 标签 |
 | ⏸ / ▶ | 暂停（沉到列表底，灰显）/ 恢复 |
 | × | 手写卡专用，直接删除（auto 卡没有，避免误删）|
+
+#### 点击聚焦的支持范围
+
+| 终端 | 支持级别 |
+|------|---------|
+| **iTerm2** | ✅ 完整支持，按 tty 精确切 tab |
+| **Terminal.app** | ✅ 完整支持 |
+| Warp / Alacritty / kitty / Ghostty | ⚠️ 退化为"激活 app"，不切具体 tab（这些终端没暴露 tty-level AppleScript API） |
+
+实现：`ps -o tty=` 拿 pid 对应的 tty → 父进程链识别终端 app → AppleScript 按 tty 后缀匹配并 select。
 
 ### `/bh-done` 在 Claude Code 里
 
@@ -182,3 +194,5 @@ local SKIPS = {
 | 浮窗跑到副屏去了 | 代码里用的是 `hs.screen.primaryScreen()`（菜单栏所在屏，稳定的）；如果还是错位，看 `lua` 那段 `placeAtHidden()` 的重试逻辑 |
 | Codex.app 的 Electron 子进程被误识别 | `SKIPS` 已经过滤 `%.app/Contents/`；如果还有漏的，往 SKIPS 加 |
 | 闲置项目的卡也想看 | 把 `FRESH_SECONDS` 调大（默认 7 天） |
+| 点卡片没切到 tab | 你用的终端是 Warp / Alacritty / kitty / Ghostty？这些只能激活 app；用 iTerm2 / Terminal.app 才能精确切 tab |
+| 点卡片变红了 | 鼠标悬停卡片看 title 提示。常见原因：① liveSessionPids 还没填上（等下一轮 reconcile，10s 后再点）② 父进程链找不到已知终端（看 [Issues] 反馈未识别的 app 名） |

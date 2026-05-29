@@ -30,6 +30,7 @@ local mouseTimer     = nil
 local hideTimer      = nil
 local hidden         = true
 local ignoreNextWatch = false
+local liveSessionPids = {}  -- session_key → pid（每次 reconcile 重算）
 
 -- ─── 检测的 agent CLI 模式 ───────────────────────
 -- 每条 pattern 是 Lua 的字符串模式（不是正则）
@@ -244,6 +245,100 @@ local function detectSessions()
   return sessions
 end
 
+-- ─── pid → 终端窗口聚焦 ─────────────────────────
+-- 预热 osascript（首次 applescript() 会加载 OSAKit，~200ms 卡顿，立刻打一次 no-op）
+pcall(hs.osascript.applescript, "return 1")
+
+local function getTtyOfPid(pid)
+  local h = io.popen(string.format("ps -o tty= -p %s 2>/dev/null", pid))
+  if not h then return nil end
+  local tty = h:read("*line")
+  h:close()
+  if not tty then return nil end
+  tty = tty:gsub("^%s+", ""):gsub("%s+$", "")
+  return tty ~= "" and tty or nil
+end
+
+-- 顺着进程父链找终端 app 名（iTerm2 / Terminal / Warp / ...）
+local function findTerminalApp(pid)
+  local cur = tostring(pid)
+  for _ = 1, 8 do
+    local h = io.popen("ps -p " .. cur .. " -o ppid=,command= 2>/dev/null")
+    if not h then return nil end
+    local line = h:read("*line")
+    h:close()
+    if not line then return nil end
+    local ppid, cmd = line:match("^%s*(%d+)%s+(.+)$")
+    if not ppid then return nil end
+    if cmd:find("iTerm") or cmd:find("iTermServer") then return "iTerm" end
+    if cmd:find("Terminal%.app") then return "Terminal" end
+    if cmd:find("Warp%.app") then return "Warp" end
+    if cmd:find("Alacritty") then return "Alacritty" end
+    if cmd:find("kitty") then return "kitty" end
+    if cmd:find("Ghostty") then return "Ghostty" end
+    if ppid == "1" then return nil end
+    cur = ppid
+  end
+  return nil
+end
+
+local function focusITermTty(tty)
+  local script = string.format([[
+    tell application "iTerm"
+      activate
+      repeat with w in windows
+        repeat with t in tabs of w
+          repeat with s in sessions of t
+            if (tty of s) ends with "%s" then
+              select w
+              select t
+              select s
+              return
+            end if
+          end repeat
+        end repeat
+      end repeat
+    end tell
+  ]], tty)
+  hs.osascript.applescript(script)
+end
+
+local function focusTerminalTty(tty)
+  local script = string.format([[
+    tell application "Terminal"
+      activate
+      repeat with w in windows
+        repeat with t in tabs of w
+          if (tty of t) ends with "%s" then
+            set selected of t to true
+            set frontmost of w to true
+            return
+          end if
+        end repeat
+      end repeat
+    end tell
+  ]], tty)
+  hs.osascript.applescript(script)
+end
+
+local function focusSession(sessionKey)
+  local pid = liveSessionPids[sessionKey]
+  if not pid then return false, "no live pid for " .. sessionKey end
+  local tty = getTtyOfPid(pid)
+  if not tty then return false, "no tty for pid " .. pid end
+  local app = findTerminalApp(pid)
+  if app == "iTerm" then
+    focusITermTty(tty); return true
+  elseif app == "Terminal" then
+    focusTerminalTty(tty); return true
+  elseif app then
+    -- 退化：至少把那个 app 拉到前面
+    hs.application.launchOrFocus(app)
+    return false, "no tty-level switch for " .. app .. " (activated app only)"
+  end
+  return false, "unknown terminal app"
+end
+
 -- ─── UI 加载状态推送 ────────────────────────────
 local function setLoading(on)
   if not webview then return end
@@ -267,6 +362,11 @@ end
 local function reconcile()
   setLoading(true)
   local sessions = detectSessions()
+  -- 顺手更新 session_key → pid 映射，给 focus 用
+  liveSessionPids = {}
+  for _, s in ipairs(sessions) do
+    liveSessionPids[s.key] = s.pid
+  end
   local data = loadData()
 
   -- 当前活跃 key 集合
@@ -370,6 +470,13 @@ local function startServer()
     if method == "POST" and path == "/save" then
       local ok = writeRaw(body)
       return ok and "ok" or "fail", ok and 200 or 500, cors
+    end
+    if method == "POST" and path == "/focus" then
+      local ok, payload = pcall(hs.json.decode, body)
+      local key = ok and payload and payload.session_key or nil
+      if not key then return "missing session_key", 400, cors end
+      local fok, ferr = focusSession(key)
+      return fok and "ok" or (ferr or "fail"), fok and 200 or 500, cors
     end
     return "not found", 404, cors
   end)
@@ -559,6 +666,7 @@ end
 function BH.scanNow() reconcile() end
 function BH.slideIn()  slideIn()  end
 function BH.slideOut() slideOut() end
+function BH.focus(key) return focusSession(key) end
 BH.base = BASE  -- 暴露 BASE，调试时 hs -c "print(_G.BH.base)" 就能看
 
 -- 调试用：让外部 hs cli 能调 JS

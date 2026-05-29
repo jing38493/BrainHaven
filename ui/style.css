@@ -148,6 +148,15 @@ body {
 .bh-src { font-size: 13px; flex-shrink: 0; }
 .bh-card.auto { border-left-color: var(--accent); background: rgba(255, 158, 184, 0.06); }
 .bh-card.auto:hover { background: rgba(255, 158, 184, 0.10); }
+.bh-card.clickable { cursor: pointer; }
+.bh-card.focusing {
+  background: rgba(255, 158, 184, 0.18);
+  transition: background 100ms ease;
+}
+.bh-card.focus-fail {
+  background: rgba(255, 80, 80, 0.18);
+  transition: background 100ms ease;
+}
 .bh-card-row .dim { color: var(--text-dim); font-style: italic; font-size: 11px; }
 .bh-tag {
   margin-left: auto;
