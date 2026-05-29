@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BrainHaven</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header id="bh-header">
+    <span class="bh-title">🌸 BrainHaven</span>
+    <span id="bh-status" class="bh-status"></span>
+    <span id="bh-count" class="bh-count">0</span>
+  </header>
+
+  <main id="bh-list" class="bh-list">
+    <!-- agent cards injected by app.js -->
+  </main>
+
+  <div id="bh-empty" class="bh-empty hidden">
+    没检测到 agent session<br>也没有手写卡 🌸
+  </div>
+
+  <footer id="bh-footer">
+    <button id="bh-add" class="bh-add">+ 加一张手写卡</button>
+    <button id="bh-archive-toggle" class="bh-archive-toggle">
+      ✓ 今日完成 <span id="bh-archive-count">0</span>
+    </button>
+  </footer>
+
+  <section id="bh-archive" class="bh-archive hidden">
+    <!-- archive items injected by app.js -->
+  </section>
+
+  <!-- 编辑/新增弹层 -->
+  <div id="bh-modal" class="bh-modal hidden">
+    <div class="bh-modal-card">
+      <h3 id="bh-modal-title">新卡片</h3>
+      <label>名字 <input type="text" id="bh-f-title" placeholder="例：电池识别 修测试"></label>
+      <label>🎯 目标 <input type="text" id="bh-f-goal" placeholder="例：通过 CI"></label>
+      <label>➡  下一步 <input type="text" id="bh-f-next" placeholder="例：跑 unit test"></label>
+      <label>标签
+        <select id="bh-f-tag">
+          <option value="">无</option>
+          <option value="工作">工作</option>
+          <option value="学习">学习</option>
+          <option value="生活">生活</option>
+        </select>
+      </label>
+      <div class="bh-modal-actions">
+        <button id="bh-modal-cancel" class="bh-btn bh-btn-ghost">取消</button>
+        <button id="bh-modal-save"   class="bh-btn bh-btn-primary">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

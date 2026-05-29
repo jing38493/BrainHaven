@@ -1,0 +1,23 @@
+# User data (contains session content + sessionIds — never commit)
+data/tasks.json
+
+# Claude Code per-repo permissions cache
+.claude/settings.local.json
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Tmp
+/tmp/
+PLAN.md
+TODO.md
