@@ -4,6 +4,9 @@ data/tasks.json
 # Claude Code per-repo permissions cache
 .claude/settings.local.json
 
+#docs
+docs/ARCHITECTURE.md
+
 # macOS
 .DS_Store
 
