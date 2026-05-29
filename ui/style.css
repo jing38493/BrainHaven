@@ -193,6 +193,12 @@ body {
   transition: background 100ms ease;
 }
 .bh-card-row .dim { color: var(--text-dim); font-style: italic; font-size: 11px; }
+.bh-card-row .ai-suggest {
+  color: var(--text-dim);
+  font-style: italic;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
 .bh-tag {
   margin-left: auto;
   font-size: 10px;

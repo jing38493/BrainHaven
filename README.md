@@ -23,7 +23,7 @@
 - 🤖 **自动检测** 当前正在跑的 `claude` / `codex` / `aider` / `gemini` / `opencode` 进程，每 10 秒一次
 - 📝 **抓取 recap** 从 Claude Code 的 JSONL transcript 里抠出 `aiTitle` 当卡片标题、`away_summary` 当描述
 - 🌊 **边缘自动隐藏**（macOS Dock 式行为）——平时藏在屏幕外，鼠标到最左边触发滑出
-- ✏️ **每张卡可填**「目标 + 下一步」帮你做"context check"
+- ✏️ **每张卡可填**「目标 + 下一步」帮你做"context check"——没填则不渲染（recap 已涵盖），点 ✎ 编辑时输入框 placeholder 会显示从 recap 抠出的 🤖 AI 建议值供参考
 - ✓ **`!bh-done`**（推荐 0 token）/ **`/bh-done`**（slash command）一键归档卡片 + 关闭 session + 关 tab
 - 🎯 **点击卡片自动切到对应终端 tab**（支持 iTerm2 / Terminal.app）——不用手动找哪个窗口
 - 📊 **项目进度条**：cwd 根目录有 `plan.md`（含 `- [ ]` / `- [x]` checkbox）时自动渲染进度 + 当前步骤；也支持**手动输入**（✎ 编辑里填三个字段，覆盖 plan.md）
@@ -135,6 +135,21 @@ cp commands/bh-done.md ~/.claude/commands/
 | Warp / Alacritty / kitty / Ghostty | ⚠️ 退化为"激活 app"，不切具体 tab（这些终端没暴露 tty-level AppleScript API） |
 
 实现：`ps -o tty=` 拿 pid 对应的 tty → 父进程链识别终端 app → AppleScript 按 tty 后缀匹配并 select。
+
+### 🎯 目标 / ➡ 下一步 的展示策略
+
+为了避免和 📝 recap **信息冗余**（Claude 写 recap 时已经把目标和下一步串在自然语言里了），卡片做了精简：
+
+| 情况 | 卡片上显示 |
+|------|-----------|
+| 用户没手填 🎯/➡ | **整行不渲染**（recap 已经覆盖了） |
+| 用户手填了 🎯 或 ➡ | 显示用户填的那行（白字） |
+
+**点 ✎ 编辑时**会看到 🎯/➡ 输入框，placeholder 里显示从 `away_summary` 用正则抠出的 🤖 AI 建议值——参考着写、想改直接覆盖。
+
+AI 解析规则（看 `scripts/extract-recap.py` 里的 `parse_summary`）：
+- **下一步**：匹配 `下一步[：:是等]?` 后面那截，截到下一个句号或换行
+- **目标**：先找显式 `目标是xxx` / `目标：xxx`；没匹配就退化到 recap 的第一句（去掉「下一步...」段后）；含 `——` 分隔时取后半截
 
 ### 项目进度（plan.md）
 

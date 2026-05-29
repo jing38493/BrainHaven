@@ -147,8 +147,13 @@
     const sourceIcon = isAuto ? '<span class="bh-src" title="自动检测">🤖</span>' : '';
     const playPauseIcon = t.status === 'paused' ? '▶' : '⏸';
     const playPauseTitle = t.status === 'paused' ? '继续' : '暂停';
-    const goalDisplay = t.goal && t.goal.trim() ? escapeHtml(t.goal) : '<span class="dim">点 ✎ 写目标</span>';
-    const nextDisplay = t.next_step && t.next_step.trim() ? escapeHtml(t.next_step) : '<span class="dim">点 ✎ 写下一步</span>';
+    // 只有用户手填了才显示 🎯/➡ 整行；没填就不渲染（recap 已经覆盖）
+    const goalRow = (t.goal && t.goal.trim())
+      ? `<div class="bh-card-row"><span class="icon">🎯</span><span>${escapeHtml(t.goal)}</span></div>`
+      : '';
+    const nextRow = (t.next_step && t.next_step.trim())
+      ? `<div class="bh-card-row"><span class="icon">➡</span><span>${escapeHtml(t.next_step)}</span></div>`
+      : '';
 
     const subtitleHtml = t.subtitle
       ? `<div class="bh-card-subtitle">${escapeHtml(t.subtitle)}</div>`
@@ -181,8 +186,8 @@
       ${subtitleHtml}
       ${progressHtml}
       ${recapHtml}
-      <div class="bh-card-row"><span class="icon">🎯</span><span>${goalDisplay}</span></div>
-      <div class="bh-card-row"><span class="icon">➡</span><span>${nextDisplay}</span></div>
+      ${goalRow}
+      ${nextRow}
       <div class="bh-card-actions">
         <button class="bh-act" data-act="done" title="完成">✓</button>
         <button class="bh-act" data-act="edit" title="编辑">✎</button>
@@ -291,6 +296,9 @@
     $fGoal.value  = t ? t.goal  : '';
     $fNext.value  = t ? t.next_step : '';
     $fTag.value   = t ? (t.tag || '') : '';
+    // placeholder 用 AI 解析的目标/下一步（如果有），方便用户参考
+    $fGoal.placeholder = (t && t.auto_goal) ? '🤖 ' + t.auto_goal : '例：通过 CI';
+    $fNext.placeholder = (t && t.auto_next) ? '🤖 ' + t.auto_next : '例：跑 unit test';
     const isManual = t && t.progress && t.progress.source === 'manual';
     const presetTotal = isManual ? (t.progress.total ?? 0) : 0;
     const presetDone  = isManual ? (t.progress.done  ?? 0) : 0;

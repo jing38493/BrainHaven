@@ -12,6 +12,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import sys
 
 
@@ -21,6 +22,49 @@ def escape_cwd(cwd: str) -> str:
 
 
 CLAUDE_HINT_RE = "(disable recaps in /config)"
+
+# 从 away_summary 抠「下一步」「目标」
+NEXT_RE = re.compile(r"下一步[：:是等、 ]*\s*([^。\n]+?)(?=[。\n]|$)")
+GOAL_EXPLICIT_RE = re.compile(r"(?:目标是|目标[：:])\s*([^。;；\n]+?)(?=[。;；\n]|$)")
+DASH_SPLIT_RE = re.compile(r"(?:——|——|--)")
+
+
+def parse_summary(text):
+    """从 away_summary 解析 (goal, next_step)，任一可能为 None"""
+    if not text or not isinstance(text, str):
+        return None, None
+
+    # next_step
+    next_step = None
+    m = NEXT_RE.search(text)
+    if m:
+        next_step = m.group(1).strip(" ，,")
+
+    # goal: 先找显式「目标是 / 目标：」
+    goal = None
+    m = GOAL_EXPLICIT_RE.search(text)
+    if m:
+        goal = m.group(1).strip(" ，,")
+    else:
+        # 退化：去掉「下一步...」整段后，取第一句（。前的部分）
+        cleaned = re.sub(r"下一步[^。]*[。]?", "", text).strip()
+        m2 = re.match(r"^(.+?)[。]", cleaned)
+        if m2:
+            goal = m2.group(1).strip()
+        elif cleaned:
+            goal = cleaned.strip()
+        # 如果含「——」分隔，取后半段（如「你在做 BrainHaven——桌面置顶小窗」取「桌面置顶小窗」）
+        if goal and "——" in goal:
+            parts = DASH_SPLIT_RE.split(goal)
+            if len(parts) >= 2 and parts[-1].strip():
+                goal = parts[-1].strip()
+
+    # 长度兜底
+    if goal and len(goal) > 80:
+        goal = goal[:78].rstrip() + "…"
+    if next_step and len(next_step) > 80:
+        next_step = next_step[:78].rstrip() + "…"
+    return goal, next_step
 
 # 这些前缀的 user 消息是 Claude Code 命令/系统注入，不是真的用户输入，过滤掉
 USER_MSG_BLACKLIST_PREFIXES = (
@@ -98,7 +142,11 @@ def parse_jsonl(path: str):
 
 
 def empty_result():
-    return {"title": None, "recap": None, "jsonl": None, "sessionId": None, "cwd": None, "mtime": None}
+    return {
+        "title": None, "recap": None,
+        "auto_goal": None, "auto_next": None,
+        "jsonl": None, "sessionId": None, "cwd": None, "mtime": None,
+    }
 
 
 def package(jsonl_path: str, sessionId: str = None, cwd: str = None):
@@ -109,6 +157,7 @@ def package(jsonl_path: str, sessionId: str = None, cwd: str = None):
         title = title.replace("\n", " ").replace("\r", " ").strip()
     if recap:
         recap = recap.replace("\r", "").strip()
+    auto_goal, auto_next = parse_summary(recap)
     mtime = None
     try:
         mtime = int(os.path.getmtime(jsonl_path))
@@ -117,6 +166,8 @@ def package(jsonl_path: str, sessionId: str = None, cwd: str = None):
     return {
         "title": title,
         "recap": recap,
+        "auto_goal": auto_goal,
+        "auto_next": auto_next,
         "jsonl": os.path.basename(jsonl_path),
         "sessionId": sessionId or os.path.splitext(os.path.basename(jsonl_path))[0],
         "cwd": cwd,

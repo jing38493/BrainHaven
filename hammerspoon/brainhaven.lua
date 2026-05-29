@@ -128,8 +128,26 @@ local MOUSE_POLL_SEC = 0.1
 -- 调 python 脚本读 Claude Code 会话信息
 -- mode = "--pid" | "--cwd" | "--jsonl"，arg 是对应的值
 -- 返回 table {title, recap, jsonl, sessionId, cwd, mtime} 或 nil
+--
+-- 缓存：按 (mode, arg) → {jsonl_mtime, result}。jsonl mtime 没变就直接返回缓存，
+-- 避免每次 reconcile 都 spawn python（10 sessions × ~80ms 是肉眼可见的卡顿源）
+local sessionInfoCache = {}
+
 local function getSessionInfo(mode, arg)
   if not arg or arg == "" then return nil end
+  local cacheKey = mode .. ":" .. tostring(arg)
+  local cached = sessionInfoCache[cacheKey]
+
+  -- 对 --pid 模式：先快速 stat jsonl 看 mtime 是否变；变了才走 python
+  if cached and cached.jsonl_path then
+    local h0 = io.popen(string.format('stat -f %%m "%s" 2>/dev/null', cached.jsonl_path))
+    local mt = h0 and h0:read("*line") or nil
+    if h0 then h0:close() end
+    if mt and tonumber(mt) == cached.jsonl_mtime then
+      return cached.result
+    end
+  end
+
   local safeArg = tostring(arg):gsub('"', '\\"')
   local cmd = string.format('python3 "%s" %s "%s" 2>/dev/null', RECAP_PY, mode, safeArg)
   local h = io.popen(cmd)
@@ -139,6 +157,17 @@ local function getSessionInfo(mode, arg)
   if not raw or raw == "" then return nil end
   local ok, data = pcall(hs.json.decode, raw)
   if not ok or type(data) ~= "table" then return nil end
+
+  -- 缓存：记录 jsonl 完整路径 + mtime
+  if data.cwd and data.jsonl then
+    local jsonl_path = os.getenv("HOME") .. "/.claude/projects/"
+      .. data.cwd:gsub("/", "-"):gsub("%.", "-") .. "/" .. data.jsonl
+    sessionInfoCache[cacheKey] = {
+      jsonl_path  = jsonl_path,
+      jsonl_mtime = data.mtime,
+      result      = data,
+    }
+  end
   return data
 end
 
@@ -275,6 +304,8 @@ local function detectSessions()
           jsonl     = info and info.jsonl or nil,
           title     = info and info.title or nil,
           recap     = info and info.recap or nil,
+          auto_goal = info and info.auto_goal or nil,
+          auto_next = info and info.auto_next or nil,
           mtime     = info and info.mtime or nil,
           progress  = getProgress(cwd),
           key       = key,
@@ -430,6 +461,9 @@ local function reconcile()
           t.recap = liveSession.recap
           t.updated_at = isoNow()
         end
+        -- auto_goal / auto_next 永远跟着 recap 走（用户的 goal/next_step 是另外的字段）
+        t.auto_goal = liveSession.auto_goal
+        t.auto_next = liveSession.auto_next
         -- 进度刷新：plan.md 变化时跟着变；但用户手动填的（source=manual）永远尊重
         if not (t.progress and t.progress.source == "manual") then
           t.progress = liveSession.progress
@@ -471,6 +505,8 @@ local function reconcile()
         subtitle    = subtitle,
         recap       = s.recap,
         progress    = s.progress,
+        auto_goal   = s.auto_goal,
+        auto_next   = s.auto_next,
         goal        = "",
         next_step   = "",
         status      = "active",
@@ -639,9 +675,13 @@ local function createWebview()
     }
   )
 
-  -- 用 borderless 风格，没有 title bar 占空间；用 floating level 永远置顶
+  -- 用 borderless + nonactivating；level 用 screenSaver(1000) 显示在全屏 app 之上；
+  -- behavior canJoinAllSpaces + stationary 让它跟着所有 Space 走（包括全屏 app 那个独立 Space）
   webview:windowStyle({ "borderless", "nonactivating" })
-       :level(hs.drawing.windowLevels.floating)
+       :level(hs.drawing.windowLevels.screenSaver)
+       :behavior(hs.drawing.windowBehaviors.canJoinAllSpaces
+                 + hs.drawing.windowBehaviors.stationary
+                 + hs.drawing.windowBehaviors.fullScreenAuxiliary)
        :allowGestures(true)
        :allowTextEntry(true)
        :bringToFront(true)
@@ -714,6 +754,20 @@ function BH.slideIn()  slideIn()  end
 function BH.slideOut() slideOut() end
 function BH.focus(key) return focusSession(key) end
 BH.base = BASE  -- 暴露 BASE，调试时 hs -c "print(_G.BH.base)" 就能看
+
+-- 诊断：看 timer 状态、当前 hidden 状态、缓存命中情况
+function BH.status()
+  local cacheSize = 0
+  for _ in pairs(sessionInfoCache) do cacheSize = cacheSize + 1 end
+  return {
+    hidden        = hidden,
+    poller_alive  = poller  ~= nil and poller:running(),
+    mouse_alive   = mouseTimer ~= nil and mouseTimer:running(),
+    hide_pending  = hideTimer ~= nil,
+    cache_size    = cacheSize,
+    webview_exists = webview ~= nil,
+  }
+end
 
 -- 调试用：让外部 hs cli 能调 JS
 function BH.evalJS(js)
