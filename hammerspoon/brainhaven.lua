@@ -16,11 +16,12 @@ end
 local BASE = os.getenv("BRAINHAVEN_HOME")
               or scriptDir():gsub("/hammerspoon/?$", "")
 
-local UI_URL     = "file://" .. BASE .. "/ui/index.html"
-local DATA_PATH  = BASE .. "/data/tasks.json"
-local RECAP_PY   = BASE .. "/scripts/extract-recap.py"
-local PORT       = 7787
-local POLL_SEC   = 10
+local UI_URL      = "file://" .. BASE .. "/ui/index.html"
+local DATA_PATH   = BASE .. "/data/tasks.json"
+local RECAP_PY    = BASE .. "/scripts/extract-recap.py"
+local PROGRESS_PY = BASE .. "/scripts/parse-progress.py"
+local PORT        = 7787
+local POLL_SEC    = 10
 
 local webview        = nil
 local watcher        = nil
@@ -147,6 +148,45 @@ local function isFresh(info)
   return (os.time() - info.mtime) < FRESH_SECONDS
 end
 
+-- 调 parse-progress.py 读 plan.md 进度
+-- 返回 table {file, total, done, current, percent} 或 nil
+local progressCache = {}  -- cwd → { mtime, progress }
+
+local function getProgress(cwd)
+  if not cwd or cwd == "" then return nil end
+
+  -- 先 stat 一下 mtime，避免每次都走 python
+  local statCmd = string.format(
+    'stat -f %%m "%s/plan.md" 2>/dev/null || stat -f %%m "%s/PLAN.md" 2>/dev/null',
+    cwd, cwd
+  )
+  local h0 = io.popen(statCmd)
+  local mtimeStr = h0 and h0:read("*line") or nil
+  if h0 then h0:close() end
+  if not mtimeStr then return nil end
+  local mtime = tonumber(mtimeStr)
+
+  local cached = progressCache[cwd]
+  if cached and cached.mtime == mtime then
+    return cached.progress
+  end
+
+  local safeCwd = cwd:gsub('"', '\\"')
+  local cmd = string.format('python3 "%s" "%s" 2>/dev/null', PROGRESS_PY, safeCwd)
+  local h = io.popen(cmd)
+  if not h then return nil end
+  local raw = h:read("*all")
+  h:close()
+  if not raw or raw == "" then return nil end
+  local ok, data = pcall(hs.json.decode, raw)
+  if not ok or type(data) ~= "table" or data.error then
+    progressCache[cwd] = { mtime = mtime, progress = nil }
+    return nil
+  end
+  progressCache[cwd] = { mtime = mtime, progress = data }
+  return data
+end
+
 local function contains(t, v)
   for _, x in ipairs(t) do if x == v then return true end end
   return false
@@ -236,6 +276,7 @@ local function detectSessions()
           title     = info and info.title or nil,
           recap     = info and info.recap or nil,
           mtime     = info and info.mtime or nil,
+          progress  = getProgress(cwd),
           key       = key,
         })
       end
@@ -389,6 +430,8 @@ local function reconcile()
           t.recap = liveSession.recap
           t.updated_at = isoNow()
         end
+        -- 进度刷新（plan.md 变化时跟着变）
+        t.progress = liveSession.progress
         if not t.subtitle or t.subtitle == "" then
           t.subtitle = t.tool .. " · " .. basename(t.cwd)
         end
@@ -425,6 +468,7 @@ local function reconcile()
         title       = s.title or subtitle,
         subtitle    = subtitle,
         recap       = s.recap,
+        progress    = s.progress,
         goal        = "",
         next_step   = "",
         status      = "active",

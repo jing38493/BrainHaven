@@ -26,6 +26,7 @@
 - ✏️ **每张卡可填**「目标 + 下一步」帮你做"context check"
 - ✓ **`/bh-done` slash command** 一键归档当前会话的卡片
 - 🎯 **点击卡片自动切到对应终端 tab**（支持 iTerm2 / Terminal.app）——不用手动找哪个窗口
+- 📊 **项目进度条**：cwd 根目录有 `plan.md`（含 `- [ ]` / `- [x]` checkbox）时自动渲染进度 + 当前步骤；当前步骤识别 `← **当前**` 标记，没标记则取第一个未勾的
 - 🚫 **过滤僵尸进程**（JSONL > 7 天没动的当废弃）和**误识别**（如 Codex.app 子进程、claude-code-router 的 node 进程）
 - 🔄 **header 显示「X 秒前更新过」**+ poll 时旋转图标，知道系统在运行
 - 🍑 完全本地——读你的 `~/.claude/` 不上传任何东西
@@ -122,6 +123,30 @@ cp commands/bh-done.md ~/.claude/commands/
 
 实现：`ps -o tty=` 拿 pid 对应的 tty → 父进程链识别终端 app → AppleScript 按 tty 后缀匹配并 select。
 
+### 项目进度（plan.md）
+
+在 cwd 根目录放一个 `plan.md`（大小写不敏感），用 markdown checkbox 列步骤，BrainHaven 会自动渲染进度：
+
+```markdown
+- [x] 1. 整理需求
+- [x] 2. 写设计方案
+- [ ] 3. 实现核心逻辑 ← **当前**
+- [ ] 4. 测试
+- [ ] 5. 部署
+```
+
+效果：卡片上多一段
+```
+▓▓▓▓░░░░ 40%        2/5
+当前：3. 实现核心逻辑
+```
+
+**约定**：
+- 只扫 `<cwd>/plan.md`（不递归子目录）
+- 当前步骤优先匹配含「当前」字样的行（`← **当前**` / `**当前**` 都行），没有则取第一个未勾的
+- 进度按 `done / total` 计算，0 个 checkbox = 不显示进度条
+- 按 `mtime` 缓存——你改 plan.md 后下一轮 reconcile（≤10s）就会刷新
+
 ### `/bh-done` 在 Claude Code 里
 
 ```
@@ -196,3 +221,5 @@ local SKIPS = {
 | 闲置项目的卡也想看 | 把 `FRESH_SECONDS` 调大（默认 7 天） |
 | 点卡片没切到 tab | 你用的终端是 Warp / Alacritty / kitty / Ghostty？这些只能激活 app；用 iTerm2 / Terminal.app 才能精确切 tab |
 | 点卡片变红了 | 鼠标悬停卡片看 title 提示。常见原因：① liveSessionPids 还没填上（等下一轮 reconcile，10s 后再点）② 父进程链找不到已知终端（看 [Issues] 反馈未识别的 app 名） |
+| plan.md 在那但进度没显示 | ① 大小写：脚本接受 `plan.md` / `PLAN.md` / `Plan.md`；② 没 checkbox：得有 `- [ ]` 或 `- [x]` 行，纯 spec 不会触发；③ 等 10s reconcile |
+| 进度不准 | 看 cwd 根的 plan.md 是哪个；改完 plan.md 下一轮就会刷新 |

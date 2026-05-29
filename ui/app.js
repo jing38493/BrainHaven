@@ -149,6 +149,16 @@
     const subtitleHtml = t.subtitle
       ? `<div class="bh-card-subtitle">${escapeHtml(t.subtitle)}</div>`
       : '';
+    const progressHtml = t.progress && t.progress.total
+      ? `<div class="bh-card-progress" title="${escapeHtml(t.progress.file || 'plan.md')}">
+           <div class="bh-progress-bar"><div class="bh-progress-fill" style="width:${t.progress.percent}%"></div></div>
+           <div class="bh-progress-meta">
+             <span class="bh-progress-pct">📊 ${t.progress.percent}%</span>
+             <span class="bh-progress-count">${t.progress.done}/${t.progress.total}</span>
+           </div>
+           ${t.progress.current ? `<div class="bh-progress-step">当前：${escapeHtml(t.progress.current)}</div>` : ''}
+         </div>`
+      : '';
     const recapHtml = t.recap
       ? `<div class="bh-card-recap"><span class="bh-recap-icon">📝</span>${escapeHtml(t.recap)}</div>`
       : '';
@@ -160,6 +170,7 @@
         ${tagHtml}
       </div>
       ${subtitleHtml}
+      ${progressHtml}
       ${recapHtml}
       <div class="bh-card-row"><span class="icon">🎯</span><span>${goalDisplay}</span></div>
       <div class="bh-card-row"><span class="icon">➡</span><span>${nextDisplay}</span></div>

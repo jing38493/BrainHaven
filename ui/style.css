@@ -125,6 +125,38 @@ body {
   letter-spacing: 0.2px;
   font-weight: 400;
 }
+.bh-card-progress {
+  margin: 6px 0 4px;
+  cursor: default;
+}
+.bh-progress-bar {
+  height: 4px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.bh-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--study));
+  border-radius: 2px;
+  transition: width 400ms ease;
+}
+.bh-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 3px;
+  letter-spacing: 0.2px;
+}
+.bh-progress-step {
+  font-size: 11px;
+  color: var(--text-soft);
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .bh-card-recap {
   font-size: 11.5px;
   line-height: 1.55;
