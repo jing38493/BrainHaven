@@ -9,6 +9,14 @@
   // 兜底值给"直接 open ui/index.html 浏览器调试"用。
   const bhUrl = (path) => `http://127.0.0.1:${window.__BH_PORT || 7787}${path}`;
 
+  // 主题表：key 对应 style.css 里的 [data-theme=...]
+  const THEMES = [
+    { key: 'peach',  name: '桃花',   emoji: '🌸' },
+    { key: 'mint',   name: '薄荷',   emoji: '🌿' },
+    { key: 'violet', name: '薰衣草', emoji: '💜' },
+    { key: 'dawn',   name: '晨曦',   emoji: '🌅' },
+  ];
+
   const state = {
     tasks: [],
     archive: [],
@@ -37,6 +45,7 @@
   const $fCurrent     = document.getElementById('bh-f-current');
   const $mSave     = document.getElementById('bh-modal-save');
   const $mCancel   = document.getElementById('bh-modal-cancel');
+  const $themeBtn  = document.getElementById('bh-theme');
 
   // ─── persistence bridge ──────────────────────────
   function save() {
@@ -102,11 +111,30 @@
       state.archive        = data.archive        || [];
       state.dismissed_keys = data.dismissed_keys || [];
       state.settings       = data.settings       || {};
+      applyTheme(state.settings.theme || 'peach');
       render();
     } catch (e) {
       console.error('bootstrap failed', e);
     }
   };
+
+  // ─── theme ───────────────────────────────────────
+  function applyTheme(key) {
+    const t = THEMES.find(x => x.key === key) || THEMES[0];
+    document.documentElement.dataset.theme = t.key;
+    if ($themeBtn) {
+      $themeBtn.textContent = t.emoji;
+      $themeBtn.title = `主题：${t.name}（点切下一个）`;
+    }
+  }
+  function cycleTheme() {
+    const cur = state.settings.theme || 'peach';
+    const idx = THEMES.findIndex(t => t.key === cur);
+    const next = THEMES[(idx + 1) % THEMES.length];
+    state.settings.theme = next.key;
+    applyTheme(next.key);
+    save();
+  }
 
   // ─── render ──────────────────────────────────────
   function render() {
@@ -479,6 +507,7 @@
   $archBtn.addEventListener('click',  () => $archive.classList.toggle('hidden'));
   $fTotal.addEventListener('input',   syncProgressSlider);
   $fDone.addEventListener('input',    syncProgressSlider);
+  if ($themeBtn) $themeBtn.addEventListener('click', cycleTheme);
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !$modal.classList.contains('hidden')) closeModal();

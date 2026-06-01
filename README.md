@@ -28,6 +28,7 @@
 - 🎯 **点击卡片自动切到对应终端 tab**（支持 iTerm2 / Terminal.app）——不用手动找哪个窗口
 - 📊 **项目进度条**：cwd 根目录有 `plan.md`（含 `- [ ]` / `- [x]` checkbox）时自动渲染进度 + 当前步骤；也支持**手动输入**（✎ 编辑里填三个字段，覆盖 plan.md）
 - 🔌 **手动关终端不会丢卡**——只有 `!bh-done` / ✓ 才归档；手动关掉 session 的卡片留在列表上加 🔌 已离线徽标，方便你之后补 recap、看看做了啥
+- 🎨 **4 套主题**——header 右上 🌸/🌿/💜/🌅 小按钮，点一下切下一个：**桃花**（默认粉系深色）/**薄荷**（mint 冷色深）/**薰衣草**（violet 紫深）/**晨曦**（sand+amber 浅色 light mode）。配色参考 Radix UI scale 美学，选择持久化到 `settings.theme`
 - 🚫 **过滤僵尸进程**（JSONL > 7 天没动的当废弃）和**误识别**（如 Codex.app 子进程、claude-code-router 的 node 进程）
 - 🔄 **header 显示「X 秒前更新过」**+ poll 时旋转图标，知道系统在运行
 - 🍑 完全本地——读你的 `~/.claude/` 不上传任何东西
