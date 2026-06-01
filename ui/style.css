@@ -192,6 +192,33 @@ body {
   background: rgba(255, 80, 80, 0.18);
   transition: background 100ms ease;
 }
+/* 已离线：粉色边框淡掉、整卡灰度降低，但保留可读性 */
+.bh-card.auto.disconnected {
+  border-left-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.025);
+  opacity: 0.72;
+}
+.bh-card.auto.disconnected:hover { background: rgba(255, 255, 255, 0.04); }
+.bh-card.disconnected .bh-card-title-text { color: var(--text-soft); }
+.bh-disconnect-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-weight: 500;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 150ms ease;
+}
+/* hover 卡片时徽标"亮"一下，提示能点 */
+.bh-card.disconnected:hover .bh-disconnect-badge {
+  color: var(--accent);
+  border-color: rgba(255, 158, 184, 0.4);
+  background: rgba(255, 158, 184, 0.08);
+}
 .bh-card-row .dim { color: var(--text-dim); font-style: italic; font-size: 11px; }
 .bh-card-row .ai-suggest {
   color: var(--text-dim);

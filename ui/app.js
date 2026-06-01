@@ -3,6 +3,12 @@
 // 改动：state 变化 → POST /save → Lua 写文件
 
 (function () {
+  // 端口号由 Lua 端在 didFinishNavigation 后注入到 window.__BH_PORT。
+  // didFinishNavigation 在脚本加载之后才触发，所以这里必须懒求值：
+  // 每次 fetch 时读最新的 window.__BH_PORT，否则会一直走兜底 7787。
+  // 兜底值给"直接 open ui/index.html 浏览器调试"用。
+  const bhUrl = (path) => `http://127.0.0.1:${window.__BH_PORT || 7787}${path}`;
+
   const state = {
     tasks: [],
     archive: [],
@@ -40,7 +46,7 @@
       dismissed_keys: state.dismissed_keys,
       settings: state.settings,
     });
-    fetch('http://127.0.0.1:7787/save', {
+    fetch(bhUrl("/save"), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: payload,
@@ -125,9 +131,11 @@
     }
     $count.textContent = sorted.filter(t => t.status === 'active').length;
 
-    $archCnt.textContent = state.archive.length;
+    // 按本地日期过滤：done_at 是 UTC ISO，转 Date 后比 local 年月日
+    const today = state.archive.filter(a => isLocalToday(a.done_at));
+    $archCnt.textContent = today.length;
     $archive.innerHTML = '';
-    for (const a of state.archive.slice().reverse()) {
+    for (const a of today.slice().reverse()) {
       const row = document.createElement('div');
       row.className = 'bh-archive-item';
       const reasonTxt = a.reason === 'session ended' ? ' · 已离线' : '';
@@ -136,14 +144,31 @@
     }
   }
 
+  function isLocalToday(iso) {
+    if (!iso) return false;
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return false;
+    const now = new Date();
+    return d.getFullYear() === now.getFullYear()
+        && d.getMonth()    === now.getMonth()
+        && d.getDate()     === now.getDate();
+  }
+
   function renderCard(t) {
     const el = document.createElement('div');
     const isAuto = t.source === 'auto';
-    el.className = `bh-card ${t.status === 'paused' ? 'paused' : ''} ${t.tag ? 'tag-' + t.tag : ''} ${isAuto ? 'auto' : ''}`;
+    const isDisconnected = isAuto && !!t.disconnected;
+    el.className = `bh-card ${t.status === 'paused' ? 'paused' : ''} ${t.tag ? 'tag-' + t.tag : ''} ${isAuto ? 'auto' : ''} ${isDisconnected ? 'disconnected' : ''}`;
     el.dataset.id = t.id;
-    if (isAuto && t.cwd) el.title = `${t.tool} · ${t.cwd}`;
+    if (isAuto && t.cwd) {
+      const since = isDisconnected ? `\n已离线 ${fmtAgo(Date.parse(t.disconnected_at) || Date.now())}` : '';
+      el.title = `${t.tool} · ${t.cwd}${since}`;
+    }
 
     const tagHtml = t.tag ? `<span class="bh-tag ${t.tag}">${t.tag}</span>` : '';
+    const disconnectedBadge = isDisconnected
+      ? `<span class="bh-disconnect-badge" title="终端已关闭 · 点卡复活（claude --resume）· ✓ 或 /bh-done 归档 · × 直接删">🔌 已离线 · 点我复活</span>`
+      : '';
     const sourceIcon = isAuto ? '<span class="bh-src" title="自动检测">🤖</span>' : '';
     const playPauseIcon = t.status === 'paused' ? '▶' : '⏸';
     const playPauseTitle = t.status === 'paused' ? '继续' : '暂停';
@@ -177,10 +202,16 @@
       ? `<div class="bh-card-recap"><span class="bh-recap-icon">📝</span>${escapeHtml(t.recap)}</div>`
       : '';
 
+    // × 按钮：手写卡始终显示；auto 卡只在 disconnected 时显示（让用户能清掉无主卡）
+    const deleteBtn = (!isAuto || isDisconnected)
+      ? '<button class="bh-act" data-act="delete" title="删除（不进 archive）">×</button>'
+      : '';
+
     el.innerHTML = `
       <div class="bh-card-title">
         ${sourceIcon}
         <span class="bh-card-title-text">${escapeHtml(t.title)}</span>
+        ${disconnectedBadge}
         ${tagHtml}
       </div>
       ${subtitleHtml}
@@ -192,7 +223,7 @@
         <button class="bh-act" data-act="done" title="完成">✓</button>
         <button class="bh-act" data-act="edit" title="编辑">✎</button>
         <button class="bh-act" data-act="toggle" title="${playPauseTitle}">${playPauseIcon}</button>
-        ${isAuto ? '' : '<button class="bh-act" data-act="delete" title="删除">×</button>'}
+        ${deleteBtn}
       </div>
     `;
 
@@ -207,21 +238,57 @@
       });
     });
 
-    // 点卡片非按钮区 → 让 Lua 把对应终端窗口拉到前面
+    // 点卡片非按钮区：
+    //   - 在线 → focus 对应终端 tab
+    //   - 离线 → reopen：新开 iTerm tab + claude --resume <sessionId>
     if (isAuto && t.session_key) {
       el.classList.add('clickable');
       el.addEventListener('click', (e) => {
         if (e.target.closest('.bh-act')) return;
-        focusSession(t.session_key, el);
+        if (isDisconnected) {
+          reopenSession(t.id, el);
+        } else {
+          focusSession(t.session_key, el);
+        }
       });
     }
 
     return el;
   }
 
+  function reopenSession(taskId, cardEl) {
+    if (cardEl) cardEl.classList.add('focusing');
+    fetch(bhUrl("/reopen"), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task_id: taskId }),
+    })
+      .then(r => r.text().then(t => ({ ok: r.ok, body: t })))
+      .then(({ ok, body }) => {
+        if (!cardEl) return;
+        if (!ok) {
+          cardEl.classList.remove('focusing');
+          cardEl.classList.add('focus-fail');
+          cardEl.title = '复活失败：' + body;
+          setTimeout(() => cardEl.classList.remove('focus-fail'), 1800);
+        } else {
+          // 不立刻清 focusing 状态——等下一轮 reconcile（≤10s）刷新卡片把 disconnected 标记清掉
+          setTimeout(() => cardEl.classList.remove('focusing'), 1200);
+        }
+      })
+      .catch(err => {
+        if (cardEl) {
+          cardEl.classList.remove('focusing');
+          cardEl.classList.add('focus-fail');
+          setTimeout(() => cardEl.classList.remove('focus-fail'), 1800);
+        }
+        console.warn('reopen failed', err);
+      });
+  }
+
   function focusSession(sessionKey, cardEl) {
     if (cardEl) cardEl.classList.add('focusing');
-    fetch('http://127.0.0.1:7787/focus', {
+    fetch(bhUrl("/focus"), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_key: sessionKey }),

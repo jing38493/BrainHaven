@@ -393,6 +393,53 @@ local function focusTerminalTty(tty)
   hs.osascript.applescript(script)
 end
 
+-- ─── 重启已离线 session ────────────────────────
+-- 给指定 task 在 iTerm 里新开一个 tab，cd 到原 cwd，再 `claude --resume <sid>`
+-- 没 iTerm 窗口就新建一个；非 claude 工具只 cd 不自动起进程
+local function reopenSession(taskId)
+  if not taskId or taskId == "" then return false, "missing task_id" end
+  local data = loadData()
+  local task = nil
+  for _, t in ipairs(data.tasks) do
+    if t.id == taskId then task = t; break end
+  end
+  if not task then return false, "task not found: " .. taskId end
+  if not task.cwd or task.cwd == "" then return false, "task has no cwd" end
+
+  local tool = task.tool or "claude"
+  local sid  = task.sessionId
+  local cmd
+  if tool == "claude" and sid and sid ~= "" then
+    cmd = string.format('cd %q && claude --resume %s', task.cwd, sid)
+  else
+    cmd = string.format('cd %q', task.cwd)
+  end
+  -- 转义到 AppleScript 双引号字符串
+  local function asEscape(s) return (s:gsub('\\', '\\\\'):gsub('"', '\\"')) end
+  local cmdAS = asEscape(cmd)
+
+  local script = string.format([[
+    tell application "iTerm"
+      activate
+      if (count of windows) = 0 then
+        set newWin to (create window with default profile)
+        tell current session of newWin to write text "%s"
+      else
+        tell current window
+          set newTab to (create tab with default profile)
+          tell current session of newTab to write text "%s"
+        end tell
+      end if
+    end tell
+  ]], cmdAS, cmdAS)
+
+  local ok, _, err = hs.osascript.applescript(script)
+  if not ok then
+    return false, "applescript failed: " .. tostring(err)
+  end
+  return true
+end
+
 local function focusSession(sessionKey)
   local pid = liveSessionPids[sessionKey]
   if not pid then return false, "no live pid for " .. sessionKey end
@@ -445,13 +492,21 @@ local function reconcile()
   local liveKeys = {}
   for _, s in ipairs(sessions) do liveKeys[s.key] = s end
 
-  -- 1. 已有 auto 卡片：在线则保留并刷新 title/recap，掉线则归档
+  -- 1. 已有 auto 卡片：
+  --    - 在线 → 保留并刷新 title/recap/progress；如带 disconnected 标记则清掉（session 回来了）
+  --    - 离线 → 保留卡片但打上 disconnected 标记，等用户用 /bh-done 或 ✓ 显式归档
   local kept = {}
   for _, t in ipairs(data.tasks) do
     if t.source == "auto" then
       local liveSession = liveKeys[t.session_key]
       if liveSession then
         liveSession.matched = true
+        -- session 回来了：清掉断线标记
+        if t.disconnected then
+          t.disconnected = nil
+          t.disconnected_at = nil
+          t.updated_at = isoNow()
+        end
         -- 用 detectSessions 已经拿到的信息刷新
         if liveSession.title and liveSession.title ~= t.title then
           t.title = liveSession.title
@@ -475,20 +530,15 @@ local function reconcile()
         if liveSession.sessionId and not t.sessionId then
           t.sessionId = liveSession.sessionId
         end
-        table.insert(kept, t)
       else
-        table.insert(data.archive, {
-          id        = t.id,
-          title     = t.title,
-          subtitle  = t.subtitle,
-          recap     = t.recap,
-          goal      = t.goal,
-          next_step = t.next_step,
-          tag       = t.tag,
-          done_at   = isoNow(),
-          reason    = "session ended",
-        })
+        -- 第一次发现掉线，记下时间戳；后续 reconcile 保持不动
+        if not t.disconnected then
+          t.disconnected    = true
+          t.disconnected_at = isoNow()
+          t.updated_at      = isoNow()
+        end
       end
+      table.insert(kept, t)
     else
       table.insert(kept, t)
     end
@@ -559,6 +609,13 @@ local function startServer()
       if not key then return "missing session_key", 400, cors end
       local fok, ferr = focusSession(key)
       return fok and "ok" or (ferr or "fail"), fok and 200 or 500, cors
+    end
+    if method == "POST" and path == "/reopen" then
+      local ok, payload = pcall(hs.json.decode, body)
+      local taskId = ok and payload and payload.task_id or nil
+      if not taskId then return "missing task_id", 400, cors end
+      local rok, rerr = reopenSession(taskId)
+      return rok and "ok" or (rerr or "fail"), rok and 200 or 500, cors
     end
     return "not found", 404, cors
   end)
@@ -691,6 +748,8 @@ local function createWebview()
 
   webview:navigationCallback(function(action)
     if action == "didFinishNavigation" then
+      -- 把 PORT 注入到页面，让 app.js 不用硬编码 7787
+      webview:evaluateJavaScript("window.__BH_PORT = " .. tostring(PORT) .. ";")
       pushToWebview()
       hs.timer.doAfter(0.5, reconcile)
     end
@@ -753,6 +812,7 @@ function BH.scanNow() reconcile() end
 function BH.slideIn()  slideIn()  end
 function BH.slideOut() slideOut() end
 function BH.focus(key) return focusSession(key) end
+function BH.reopen(id) return reopenSession(id) end
 BH.base = BASE  -- 暴露 BASE，调试时 hs -c "print(_G.BH.base)" 就能看
 
 -- 诊断：看 timer 状态、当前 hidden 状态、缓存命中情况
@@ -770,9 +830,12 @@ function BH.status()
 end
 
 -- 调试用：让外部 hs cli 能调 JS
+-- 加 cb：异步把求值结果 print 出来
 function BH.evalJS(js)
   if not webview then return "no webview" end
-  return webview:evaluateJavaScript(js)
+  webview:evaluateJavaScript(js, function(result, err)
+    print("[evalJS]", hs.inspect(result), err and ("err=" .. tostring(err)) or "")
+  end)
 end
 
 BH.start()

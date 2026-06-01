@@ -27,6 +27,7 @@
 - ✓ **`!bh-done`**（推荐 0 token）/ **`/bh-done`**（slash command）一键归档卡片 + 关闭 session + 关 tab
 - 🎯 **点击卡片自动切到对应终端 tab**（支持 iTerm2 / Terminal.app）——不用手动找哪个窗口
 - 📊 **项目进度条**：cwd 根目录有 `plan.md`（含 `- [ ]` / `- [x]` checkbox）时自动渲染进度 + 当前步骤；也支持**手动输入**（✎ 编辑里填三个字段，覆盖 plan.md）
+- 🔌 **手动关终端不会丢卡**——只有 `!bh-done` / ✓ 才归档；手动关掉 session 的卡片留在列表上加 🔌 已离线徽标，方便你之后补 recap、看看做了啥
 - 🚫 **过滤僵尸进程**（JSONL > 7 天没动的当废弃）和**误识别**（如 Codex.app 子进程、claude-code-router 的 node 进程）
 - 🔄 **header 显示「X 秒前更新过」**+ poll 时旋转图标，知道系统在运行
 - 🍑 完全本地——读你的 `~/.claude/` 不上传任何东西
@@ -120,11 +121,25 @@ cp commands/bh-done.md ~/.claude/commands/
 
 | 操作 | 作用 |
 |------|------|
-| 点卡片非按钮区 | 自动切换到对应终端 tab（iTerm2 / Terminal.app）。点击瞬间卡片粉色闪烁；失败变红 1.2s，鼠标悬停看具体错误 |
+| 点卡片非按钮区 | 在线卡：切换到对应终端 tab（iTerm2 / Terminal.app）。已离线卡：在 iTerm 新开 tab + `claude --resume <sessionId>` 复活 session。点击瞬间粉色闪烁；失败变红 1.8s，鼠标悬停看具体错误 |
 | ✓ | 归档（移到 archive，加进 dismissed_keys 防止 reconcile 重建） |
 | ✎ | 编辑标题 / 目标 / 下一步 / 标签 |
 | ⏸ / ▶ | 暂停（沉到列表底，灰显）/ 恢复 |
-| × | 手写卡专用，直接删除（auto 卡没有，避免误删）|
+| × | 手写卡 + **已离线的 auto 卡** 可用，直接删除（不进 archive）。live auto 卡没有 × 避免误删 |
+
+#### 🔌 已离线（disconnected）状态
+
+手动关掉终端 tab 或 session 自己挂掉后，对应的 auto 卡**不会**自动归档——它会留在列表里，标题旁多一个灰色「🔌 已离线」徽标、整卡淡化 30%，点击区域被禁用。
+
+| 想做的事 | 操作 |
+|---------|------|
+| 想接着做这个 session | **点卡片即可**——会在 iTerm 新开 tab，自动 `cd <cwd> && claude --resume <sessionId>`，10s 内 reconcile 会清掉 🔌 徽标自动复活 |
+| 这事确实做完了 | 点 ✓ 归档（建议）或 `!bh-done <sessionId 前缀>` |
+| 不想留 archive 痕迹，直接清掉 | 点 × |
+
+> 点击复活的细节：iTerm 没开窗口会自动新建；非 claude 工具（codex/aider 等）目前只 cd 到 cwd 不自动起进程（这些工具的 resume 语义还没统一）。
+>
+> 为什么这么设计：避免你正手忙脚乱关窗口/换 tab 的时候，卡片悄悄没了你都没察觉。已离线卡也保留了 recap / 进度 / 用户填的目标，方便你后续回来补做或归档。
 
 #### 点击聚焦的支持范围
 
